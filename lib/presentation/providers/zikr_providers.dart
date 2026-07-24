@@ -2,9 +2,11 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:hive/hive.dart';
 
 import '../../core/models/zikr_models.dart';
 import '../../core/storage/storage_repository_impl.dart';
+import '../../core/storage/hive_boxes.dart';
 
 part 'zikr_providers.g.dart';
 

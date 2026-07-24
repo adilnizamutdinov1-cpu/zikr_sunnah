@@ -15,12 +15,7 @@ part 'storage_repository.g.dart';
 // ============================================
 // BOX NAMES
 // ============================================
-class HiveBoxes {
-  static const String zikrs = 'zikrs';
-  static const String settings = 'settings';
-  static const String dailyStats = 'daily_stats';
-  static const String sessions = 'sessions';
-}
+import 'hive_boxes.dart'
 
 // ============================================
 // STORAGE REPOSITORY INTERFACE
