@@ -1,74 +1,98 @@
-// Progress Ring Widget
+// Тонкое золотое кольцо прогресса (CustomPainter).
+// Поддерживает «толчок вперёд» — короткое опережение реального прогресса
+// при нажатии (анимация «живой тасбих»).
 
-import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import '../../../core/theme/theme.dart';
 
-class ProgressRing extends StatelessWidget {
-  final double progress;
+class ProgressRing extends StatefulWidget {
+  final double progress; // 0..1 реальный прогресс
+  final double size;
   final double strokeWidth;
-  final Color backgroundColor;
-  final Color progressColor;
-  final AnimationController? animationController;
-  final bool showWarning;
-  final Color warningColor;
-  final Duration animationDuration;
+  final bool warning; // мерцание «почти у цели»
+  final bool complete; // мягкое свечение при достижении
 
   const ProgressRing({
     super.key,
     required this.progress,
-    this.strokeWidth = 12,
-    required this.backgroundColor,
-    required this.progressColor,
-    this.animationController,
-    this.showWarning = false,
-    this.warningColor = Colors.amber,
-    this.animationDuration = const Duration(milliseconds: 500),
+    this.size = 280,
+    this.strokeWidth = 6,
+    this.warning = false,
+    this.complete = false,
   });
 
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animationController ?? _dummyAnimation,
-      builder: (context, child) {
-        final animatedProgress = animationController != null
-            ? animationController!.value * progress
-            : progress;
-
-        return CustomPaint(
-          painter: _ProgressRingPainter(
-            progress: animatedProgress,
-            strokeWidth: strokeWidth,
-            backgroundColor: backgroundColor,
-            progressColor: progressColor,
-            showWarning: showWarning,
-            warningColor: warningColor,
-            warningAnimation: animationController?.value ?? 0,
-          ),
-        );
-      },
-    );
-  }
-
-  static final _dummyAnimation = AlwaysStoppedAnimation(1.0);
+  State<ProgressRing> createState() => _ProgressRingState();
 }
 
-class _ProgressRingPainter extends CustomPainter {
+class _ProgressRingState extends State<ProgressRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _bump;
+  double _bumpValue = 0; // опережение 0..~0.05
+  double _displayed = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayed = widget.progress.clamp(0.0, 1.0);
+    _bump = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    )..addListener(() {
+        setState(() {
+          // вперёд — обратно (easeOut)
+          _bumpValue = math.sin(_bump.value * math.pi) * 0.04;
+          _displayed = (widget.progress + _bumpValue).clamp(0.0, 1.0);
+        });
+      });
+  }
+
+  @override
+  void didUpdateWidget(covariant ProgressRing old) {
+    super.didUpdateWidget(old);
+    if ((old.progress - widget.progress).abs() > 0.0001) {
+      _displayed = (widget.progress + _bumpValue).clamp(0.0, 1.0);
+    }
+  }
+
+  /// Запустить короткий «толчок вперёд».
+  void bump() => _bump.forward(from: 0);
+
+  @override
+  void dispose() {
+    _bump.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: widget.size,
+      height: widget.size,
+      child: CustomPaint(
+        painter: _RingPainter(
+          progress: _displayed,
+          strokeWidth: widget.strokeWidth,
+          warning: widget.warning,
+          complete: widget.complete,
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
   final double progress;
   final double strokeWidth;
-  final Color backgroundColor;
-  final Color progressColor;
-  final bool showWarning;
-  final Color warningColor;
-  final double warningAnimation;
+  final bool warning;
+  final bool complete;
 
-  _ProgressRingPainter({
+  _RingPainter({
     required this.progress,
     required this.strokeWidth,
-    required this.backgroundColor,
-    required this.progressColor,
-    this.showWarning = false,
-    required this.warningColor,
-    required this.warningAnimation,
+    required this.warning,
+    required this.complete,
   });
 
   @override
@@ -76,147 +100,59 @@ class _ProgressRingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
 
-    // Background ring
+    // Фоновое кольцо
     final bgPaint = Paint()
-      ..color = backgroundColor
+      ..color = AppColors.darkSurfaceVariant
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawCircle(center, radius, bgPaint);
+
+    // Дуга прогресса
+    const startAngle = -math.pi / 2;
+    final sweep = 2 * math.pi * progress.clamp(0.0, 1.0);
+    final arcPaint = Paint()
+      ..color = AppColors.islamicGold
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
-
-    canvas.drawCircle(center, radius, bgPaint);
-
-    // Progress ring
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..color = progressColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-
-      final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
+    if (sweep > 0.001) {
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2,
-        sweepAngle,
+        startAngle,
+        sweep,
         false,
-        progressPaint,
+        arcPaint,
       );
     }
 
-    // Warning ring (pulsing)
-    if (showWarning && progress < 1.0) {
-      final warningPaint = Paint()
-        ..color = warningColor.withValues(alpha: 0.3 + 0.3 * (1 + math.sin(warningAnimation * 4 * math.pi)) / 2)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth + 4
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawCircle(center, radius + strokeWidth / 2 + 2, warningPaint);
-    }
-
-    // Completion glow
-    if (progress >= 1.0) {
+    // Мягкое свечение при достижении цели
+    if (complete) {
       final glowPaint = Paint()
-        ..color = progressColor.withValues(alpha: 0.2 * (1 + math.sin(warningAnimation * 6 * math.pi)) / 2)
+        ..color = AppColors.islamicGold.withValues(alpha: 0.12)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(center, radius - strokeWidth, glowPaint);
+    }
+
+    // Едва заметное мерцание при приближении к цели
+    if (warning) {
+      final warnPaint = Paint()
+        ..color = AppColors.islamicGold.withValues(alpha: 0.35)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth + 8
+        ..strokeWidth = strokeWidth * 0.4
         ..strokeCap = StrokeCap.round;
-
-      canvas.drawCircle(center, radius + strokeWidth / 2 + 4, glowPaint);
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweep,
+        false,
+        warnPaint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ProgressRingPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-           oldDelegate.showWarning != showWarning ||
-           oldDelegate.warningAnimation != warningAnimation;
-  }
-}
-
-// Progress Ring with Animation
-class AnimatedProgressRing extends StatefulWidget {
-  final double progress;
-  final double strokeWidth;
-  final Color backgroundColor;
-  final Color progressColor;
-  final bool showWarning;
-  final Color warningColor;
-  final Duration duration;
-  final Curve curve;
-
-  const AnimatedProgressRing({
-    super.key,
-    required this.progress,
-    this.strokeWidth = 12,
-    required this.backgroundColor,
-    required this.progressColor,
-    this.showWarning = false,
-    this.warningColor = Colors.amber,
-    this.duration = const Duration(milliseconds: 500),
-    this.curve = Curves.easeOutCubic,
-  });
-
-  @override
-  State<AnimatedProgressRing> createState() => _AnimatedProgressRingState();
-}
-
-class _AnimatedProgressRingState extends State<AnimatedProgressRing>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _progressAnimation;
-  double _previousProgress = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: widget.duration,
-      vsync: this,
-    );
-    _progressAnimation = Tween<double>(
-      begin: 0,
-      end: widget.progress,
-    ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
-    _controller.forward();
-  }
-
-  @override
-  void didUpdateWidget(covariant AnimatedProgressRing oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.progress != widget.progress) {
-      _previousProgress = _progressAnimation.value;
-      _progressAnimation = Tween<double>(
-        begin: _previousProgress,
-        end: widget.progress,
-      ).animate(CurvedAnimation(parent: _controller, curve: widget.curve));
-      _controller.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _progressAnimation,
-      builder: (context, child) {
-        return CustomPaint(
-          painter: _ProgressRingPainter(
-            progress: _progressAnimation.value,
-            strokeWidth: widget.strokeWidth,
-            backgroundColor: widget.backgroundColor,
-            progressColor: widget.progressColor,
-            showWarning: widget.showWarning,
-            warningColor: widget.warningColor,
-            warningAnimation: _controller.value,
-          ),
-        );
-      },
-    );
-  }
+  bool shouldRepaint(covariant _RingPainter old) =>
+      progress != old.progress ||
+      warning != old.warning ||
+      complete != old.complete;
 }

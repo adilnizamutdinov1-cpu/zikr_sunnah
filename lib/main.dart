@@ -1,43 +1,16 @@
-// Main App Widget with Routing and Providers
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_gen/gen_l10n/app_localizations.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 
-import 'core/theme/app_theme.dart';
-import 'core/localization/app_localizations.dart';
-import 'core/storage/storage_repository_impl.dart';
-import 'providers/zikr_providers.dart';
-import 'presentation/screens/main/main_screen.dart';
-import 'presentation/screens/zikrs/zikrs_screen.dart';
-import 'presentation/screens/path/path_screen.dart';
-import 'presentation/screens/settings/settings_screen.dart';
+import 'core/l10n/app_localizations.dart';
+import 'core/models/models.dart';
+import 'core/theme/theme.dart';
+import 'presentation/providers/providers.dart';
+import 'presentation/screens/main_screen.dart';
+import 'presentation/screens/path_screen.dart';
+import 'presentation/screens/settings_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Hive
-  await Hive.initFlutter();
-  
-  // Register adapters
-  _registerAdapters();
-  
+void main() {
   runApp(const ProviderScope(child: ZikrSunnahApp()));
-}
-
-void _registerAdapters() {
-  Hive
-    ..registerAdapter(ZikrAdapter())
-    ..registerAdapter(AppSettingsAdapter())
-    ..registerAdapter(DailyStatAdapter())
-    ..registerAdapter(ZikrSessionAdapter())
-    ..registerAdapter(BackupDataAdapter())
-    ..registerAdapter(ZikrCategoryAdapter())
-    ..registerAdapter(ThemeModeAdapter())
-    ..registerAdapter(HapticIntensityAdapter())
-    ..registerAdapter(NumberFormatTypeAdapter())
-    ..registerAdapter(SessionTypeAdapter());
 }
 
 class ZikrSunnahApp extends ConsumerWidget {
@@ -45,119 +18,114 @@ class ZikrSunnahApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Initialize storage
-    ref.watch(initializeStorageProvider);
-    
-    // Watch theme and locale
-    final theme = ref.watch(appThemeProvider);
-    final locale = ref.watch(localeProvider);
+    final ready = ref.watch(storageReadyProvider);
+    final settings = ref.watch(settingsProvider);
 
     return MaterialApp(
       title: 'Зикр по Сунне',
       debugShowCheckedModeBanner: false,
-      theme: theme,
-      darkTheme: theme,
-      locale: locale,
-      supportedLocales: supportedLocales,
-      localeResolutionCallback: localeResolutionCallback,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: _resolveThemeMode(settings.themeMode),
+      locale: Locale(settings.languageCode),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      home: const MainNavigationScreen(),
-      routes: {
-        '/zikrs': (context) => const ZikrsScreen(),
-        '/path': (context) => const PathScreen(),
-        '/settings': (context) => const SettingsScreen(),
-      },
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ready.when(
+        loading: () => const _Splash(),
+        error: (e, _) => _Error(message: e.toString()),
+        data: (_) => const HomeShell(),
+      ),
     );
   }
+
+  ThemeMode _resolveThemeMode(AppThemeMode mode) => switch (mode) {
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+        AppThemeMode.system => ThemeMode.system,
+      };
 }
 
-class MainNavigationScreen extends ConsumerStatefulWidget {
-  const MainNavigationScreen({super.key});
-
-  @override
-  ConsumerState<MainNavigationScreen> createState() => _MainNavigationScreenState();
-}
-
-class _MainNavigationScreenState extends ConsumerState<MainNavigationScreen> {
-  int _currentIndex = 0;
-  late PageController _pageController;
-  
-  final List<Widget> _screens = [
-    const MainScreen(),
-    const ZikrsScreen(),
-    const PathScreen(),
-    const SettingsScreen(),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
+class _Splash extends StatelessWidget {
+  const _Splash();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final l10n = context.l10n;
-
-    return Scaffold(
-      body: PageView(
-        controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-        },
-        children: _screens,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-          _pageController.animateToPage(
-            index,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-          );
-        },
-        destinations: [
-          NavigationDestination(
-            icon: Icon(Icons.prayer_rounded, size: 24),
-            selectedIcon: Icon(Icons.prayer_rounded, size: 26, color: colorScheme.onPrimary),
-            label: l10n.counter,
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_rounded, size: 24),
-            selectedIcon: Icon(Icons.menu_book_rounded, size: 26, color: colorScheme.onPrimary),
-            label: l10n.zikrs,
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.route_rounded, size: 24),
-            selectedIcon: Icon(Icons.route_rounded, size: 26, color: colorScheme.onPrimary),
-            label: l10n.path,
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_rounded, size: 24),
-            selectedIcon: Icon(Icons.settings_rounded, size: 26, color: colorScheme.onPrimary),
-            label: l10n.settings,
-          ),
-        ],
-        height: 72,
-        indicatorColor: colorScheme.primary.withValues(alpha: 0.15),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+    return Material(
+      color: AppColors.darkBackground,
+      child: const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.islamicGold,
+          strokeWidth: 2,
+        ),
       ),
     );
   }
 }
 
-// Locale Provider
-@riverpod
-Locale locale(LocaleRef ref) {
-  // TODO: Load from settings
-  return const Locale('ru');
+class _Error extends StatelessWidget {
+  final String message;
+  const _Error({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.darkBackground,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Text(
+            message,
+            style: const TextStyle(color: AppColors.darkTextPrimary),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Нижняя навигация: Зикры (главный), Путь, Настройки.
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key});
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
+  int _index = 0;
+
+  static const _screens = <Widget>[
+    MainScreen(),
+    PathScreen(),
+    SettingsScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    return Scaffold(
+      body: IndexedStack(index: _index, children: _screens),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
+        items: [
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.favorite_border),
+            activeIcon: const Icon(Icons.favorite),
+            label: l.zikrs,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.menu_book_outlined),
+            label: l.path,
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.settings_outlined),
+            activeIcon: const Icon(Icons.settings),
+            label: l.settings,
+          ),
+        ],
+      ),
+    );
+  }
 }
