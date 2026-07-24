@@ -9,13 +9,19 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import 'zikr_models.dart';
+import 'hive_boxes.dart';
 
 part 'storage_repository.g.dart';
 
 // ============================================
 // BOX NAMES
 // ============================================
-import 'hive_boxes.dart'
+class HiveBoxes {
+  static const String zikrs = 'zikrs';
+  static const String settings = 'settings';
+  static const String dailyStats = 'daily_stats';
+  static const String sessions = 'sessions';
+}
 
 // ============================================
 // STORAGE REPOSITORY INTERFACE
@@ -57,9 +63,6 @@ abstract class IStorageRepository {
   Future<void> clearAllData();
 }
 
-// ============================================
-// HIVE STORAGE REPOSITORY IMPLEMENTATION
-// ============================================
 class HiveStorageRepository implements IStorageRepository {
   late Box<Zikr> _zikrBox;
   late Box<AppSettings> _settingsBox;
@@ -94,17 +97,17 @@ class HiveStorageRepository implements IStorageRepository {
     _sessionBox = await Hive.openBox<ZikrSession>(HiveBoxes.sessions);
     _metaBox = await Hive.openBox<String>('meta');
     
-    // Initialize default zikrs if not done
-    if (!_metaBox.containsKey(_initializedKey)) {
+    // Initialize defaults if needed
+    if (!_metaBox.containsKey('default_zikrs_initialized')) {
       await initializeDefaultZikrs();
-      await _metaBox.put(_initializedKey, 'true');
+      await _metaBox.put('default_zikrs_initialized', 'true');
     }
     
     // Ensure active zikr is set
-    if (!_metaBox.containsKey(_activeZikrKey)) {
+    if (!_metaBox.containsKey('active_zikr_id')) {
       final zikrs = _zikrBox.values.toList();
       if (zikrs.isNotEmpty) {
-        await _metaBox.put(_activeZikrKey, zikrs.first.id);
+        await _metaBox.put('active_zikr_id', zikrs.first.id);
       }
     }
   }
@@ -115,7 +118,6 @@ class HiveStorageRepository implements IStorageRepository {
   @override
   Future<List<Zikr>> getAllZikrs() async {
     return _zikrBox.values.toList()..sort((a, b) {
-      // Sunnah azkar first, then custom, then by creation date
       if (a.category != b.category) {
         return a.category == ZikrCategory.sunnahAzkar ? -1 : 1;
       }
@@ -143,13 +145,13 @@ class HiveStorageRepository implements IStorageRepository {
   Future<void> deleteZikr(String id) async {
     await _zikrBox.delete(id);
     // If deleted zikr was active, select first available
-    final activeId = _metaBox.get(_activeZikrKey);
+    final activeId = _metaBox.get('active_zikr_id');
     if (activeId == id) {
       final remaining = _zikrBox.values.toList();
       if (remaining.isNotEmpty) {
-        await _metaBox.put(_activeZikrKey, remaining.first.id);
+        await _metaBox.put('active_zikr_id', remaining.first.id);
       } else {
-        await _metaBox.delete(_activeZikrKey);
+        await _metaBox.delete('active_zikr_id');
       }
     }
   }
@@ -163,7 +165,7 @@ class HiveStorageRepository implements IStorageRepository {
     await saveAllZikrs(defaultZikrs);
     
     if (defaultZikrs.isNotEmpty) {
-      await _metaBox.put(_activeZikrKey, defaultZikrs.first.id);
+      await _metaBox.put('active_zikr_id', defaultZikrs.first.id);
     }
   }
   
@@ -172,12 +174,12 @@ class HiveStorageRepository implements IStorageRepository {
   // ============================================
   @override
   Future<String?> getActiveZikrId() async {
-    return _metaBox.get(_activeZikrKey);
+    return _metaBox.get('active_zikr_id');
   }
   
   @override
   Future<void> setActiveZikrId(String id) async {
-    await _metaBox.put(_activeZikrKey, id);
+    await _metaBox.put('active_zikr_id', id);
   }
   
   // ============================================
@@ -196,7 +198,8 @@ class HiveStorageRepository implements IStorageRepository {
   // ============================================
   // DAILY STATS
   // ============================================
-  String _todayKey() => DateTime.now().toIso8601String().split('T').first;
+  String _dateKey(DateTime date) => 
+    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   
   @override
   Future<DailyStat?> getDailyStat(String dateKey) async {
@@ -208,11 +211,11 @@ class HiveStorageRepository implements IStorageRepository {
     var stats = _dailyStatBox.values.toList();
     
     if (start != null) {
-      final startKey = start.toIso8601String().split('T').first;
+      final startKey = _dateKey(start);
       stats = stats.where((s) => s.dateKey.compareTo(startKey) >= 0).toList();
     }
     if (end != null) {
-      final endKey = end.toIso8601String().split('T').first;
+      final endKey = _dateKey(end);
       stats = stats.where((s) => s.dateKey.compareTo(endKey) <= 0).toList();
     }
     
@@ -227,7 +230,7 @@ class HiveStorageRepository implements IStorageRepository {
   
   @override
   Future<void> incrementDailyCount(String zikrId, int count, int timeSeconds) async {
-    final key = _todayKey();
+    final key = _dateKey(DateTime.now());
     var stat = _dailyStatBox.get(key) ?? DailyStat(
       dateKey: key,
       zikrCounts: {},
@@ -247,7 +250,7 @@ class HiveStorageRepository implements IStorageRepository {
   
   @override
   Future<void> incrementCompletedTarget(String zikrId) async {
-    final key = _todayKey();
+    final key = _dateKey(DateTime.now());
     var stat = _dailyStatBox.get(key) ?? DailyStat(
       dateKey: key,
       zikrCounts: {},
@@ -269,13 +272,15 @@ class HiveStorageRepository implements IStorageRepository {
   @override
   Future<void> saveSession(ZikrSession session) async {
     await _sessionBox.put(session.id, session);
-    // Keep only last 200 sessions
-    if (_sessionBox.length > 200) {
-      final keys = _sessionBox.keys.cast<String>().toList();
-      final sessions = keys.map((k) => _sessionBox.get(k)!).toList();
-      sessions.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      final toDelete = sessions.take(sessions.length - 200).map((s) => s.id).toList();
-      await _sessionBox.deleteAll(toDelete);
+    // Keep only last 1000 sessions
+    if (_sessionBox.length > 1000) {
+      final keys = _sessionBox.keys.cast<String>().toList()
+        ..sort((a, b) {
+          final sa = _sessionBox.get(a)!;
+          final sb = _sessionBox.get(b)!;
+          return sa.timestamp.compareTo(sb.timestamp);
+        });
+      await _sessionBox.delete(keys.first);
     }
   }
   
@@ -304,7 +309,19 @@ class HiveStorageRepository implements IStorageRepository {
     final zikrs = await getAllZikrs();
     final settings = await getSettings();
     final stats = await getDailyStats();
-    final sessions = await getRecentSessions(limit: 100);
+    final recentSessions = <ZikrSession>[];
+    
+    final sessionKeys = _sessionBox.keys.cast<String>().toList()
+      ..sort((a, b) {
+        final sa = _sessionBox.get(a)!;
+        final sb = _sessionBox.get(b)!;
+        return sb.timestamp.compareTo(sa.timestamp);
+      });
+    
+    for (final key in sessionKeys.take(100)) {
+      final session = _sessionBox.get(key);
+      if (session != null) recentSessions.add(session);
+    }
     
     return BackupData(
       version: '1.0.0',
@@ -312,7 +329,7 @@ class HiveStorageRepository implements IStorageRepository {
       zikrs: zikrs,
       settings: settings,
       dailyStats: stats,
-      recentSessions: sessions,
+      recentSessions: recentSessions,
     );
   }
   
@@ -322,9 +339,12 @@ class HiveStorageRepository implements IStorageRepository {
     await _settingsBox.clear();
     await _dailyStatBox.clear();
     await _sessionBox.clear();
+    await _metaBox.clear();
     
-    await saveAllZikrs(backup.zikrs);
-    await saveSettings(backup.settings);
+    for (final zikr in backup.zikrs) {
+      await _zikrBox.put(zikr.id, zikr);
+    }
+    await _settingsBox.put('app_settings', backup.settings);
     
     for (final stat in backup.dailyStats) {
       await _dailyStatBox.put(stat.dateKey, stat);
@@ -335,9 +355,9 @@ class HiveStorageRepository implements IStorageRepository {
     }
     
     if (backup.zikrs.isNotEmpty) {
-      await _metaBox.put(_activeZikrKey, backup.zikrs.first.id);
+      await _metaBox.put('active_zikr_id', backup.zikrs.first.id);
     }
-    await _metaBox.put(_initializedKey, 'true');
+    await _metaBox.put('default_zikrs_initialized', 'true');
   }
   
   @override
@@ -351,11 +371,8 @@ class HiveStorageRepository implements IStorageRepository {
   }
 }
 
-// ============================================
-// RIVERPOD PROVIDERS
-// ============================================
 @riverpod
-HiveStorageRepository storageRepository(StorageRepositoryRef ref) {
+IStorageRepository storageRepository(StorageRepositoryRef ref) {
   return HiveStorageRepository();
 }
 
