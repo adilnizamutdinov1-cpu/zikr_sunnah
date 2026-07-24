@@ -1,0 +1,67 @@
+name: zikr_sunnah
+description: "Зикр по Сунне — красивый, спокойный и полностью офлайн цифровой тасбих для ежедневного зикра."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Local storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.3
+
+  # UI & Animation
+  flutter_animate: ^4.5.0
+  confetti: ^0.8.0
+
+  # Haptics & System
+  vibration: ^3.1.0
+  services: ^0.1.0
+
+  # Date & Time
+  intl: ^0.19.0
+  table_calendar: ^3.1.2
+
+  # File operations
+  file_picker: ^8.0.1
+  share_plus: ^10.0.2
+
+  # Utilities
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+  collection: ^1.18.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.9
+  riverpod_generator: ^2.4.2
+  hive_generator: ^2.0.1
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+  flutter_gen_runner: ^5.5.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/patterns/
+    - assets/data/
+    - l10n/
+
+flutter_gen:
+  output: lib/core/utils/
+  integrations:
+    flutter_svg: true
