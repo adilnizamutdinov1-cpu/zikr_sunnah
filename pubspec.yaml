@@ -23,9 +23,8 @@ dependencies:
 
   # UI & Animation
   flutter_animate: ^4.5.0
-  confetti: ^0.8.0
 
-  # Haptics & System
+  # Haptics
   vibration: ^3.1.0
 
   # Date & Time
@@ -56,11 +55,4 @@ flutter:
   uses-material-design: true
   generate: true
   assets:
-    - assets/patterns/
-    - assets/data/
     - l10n/
-
-flutter_gen:
-  output: lib/core/utils/
-  integrations:
-    flutter_svg: true
