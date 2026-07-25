@@ -96,5 +96,13 @@
   "plus10": "+10",
   "plus100": "+100",
   "plus1000": "+1,000",
-  "enterExact": "Enter exact count"
+  "plus10": "+10",
+  "plus100": "+100",
+  "plus1000": "+1,000",
+  "enterExact": "Enter exact count",
+  "noData": "No data",
+  "currentCount": "Current count",
+  "completedTargets": "Completed targets",
+  "finishedGoals": "Goals finished",
+  "noActivity": "No activity yet. Start with one tap."
 }
